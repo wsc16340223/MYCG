@@ -6,12 +6,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-
 #include <learnopengl/shader.h>
 #include <learnopengl/camera.h>
-
+#include <learnopengl/model.h>
 
 #include <iostream>
+
+#include "ImGUI/imgui.h"
+#include "ImGUI/imgui_impl_opengl3.h"
+#include "ImGUI/imgui_impl_glfw.h"
+
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -27,7 +31,7 @@ const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
 // camera
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera(glm::vec3(0.0f, 1.0f, 8.0f));
 float lastX = (float)SCR_WIDTH / 2.0;
 float lastY = (float)SCR_HEIGHT / 2.0;
 bool firstMouse = true;
@@ -67,7 +71,7 @@ int main()
 	glfwSetScrollCallback(window, scroll_callback);
 
 	// tell GLFW to capture our mouse
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// glad: load all OpenGL function pointers
 	// ---------------------------------------
@@ -81,12 +85,27 @@ int main()
 	// -----------------------------
 	glEnable(GL_DEPTH_TEST);
 
+	// IMGUI INIT
+	const char* glsl_version = "#version 330 core";
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGui::StyleColorsClassic();
+
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
+
+	// IMGUI values
+	float lightColor[3]{ 1.0f, 1.0f, 1.0f };
+	bool isPerspective = false, isOrthometric = true;
+	bool AutoLamp = true;
+
 	// build and compile shaders
 	// -------------------------
-	Shader shader("D://GLFW/include/learnopengl/3.1.3.shadow_mapping.vs", "D://GLFW/include/learnopengl/3.1.3.shadow_mapping.fs");
-	Shader simpleDepthShader("D://GLFW/include/learnopengl/3.1.3.shadow_mapping_depth.vs", "D://GLFW/include/learnopengl/3.1.3.shadow_mapping_depth.fs");
-	Shader debugDepthQuad("D://GLFW/include/learnopengl/3.1.3.debug_quad.vs", "D://GLFW/include/learnopengl/3.1.3.debug_quad_depth.fs");
-	Shader lampShader("D://GLFW/include/learnopengl/2.2.lamp.vs", "D://GLFW/include/learnopengl/2.2.lamp.fs");
+	Shader shader("D://GLFW/include/shaders/3.1.3.shadow_mapping.vs", "D://GLFW/include/shaders/3.1.3.shadow_mapping.fs");
+	Shader simpleDepthShader("D://GLFW/include/shaders/3.1.3.shadow_mapping_depth.vs", "D://GLFW/include/shaders/3.1.3.shadow_mapping_depth.fs");
+	Shader debugDepthQuad("D://GLFW/include/shaders/3.1.3.debug_quad.vs", "D://GLFW/include/shaders/3.1.3.debug_quad_depth.fs");
+	Shader lampShader("D://GLFW/include/shaders/2.2.lamp.vs", "D://GLFW/include/shaders/2.2.lamp.fs");
 
 	// set up vertex data (and buffer(s)) and configure vertex attributes
 	// ------------------------------------------------------------------
@@ -115,6 +134,9 @@ int main()
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 	glBindVertexArray(0);
 
+	// load textures
+	// -------------
+	unsigned int woodTexture = loadTexture("D://GLFW/include/resources/textures/wood.png");
 
 	// configure depth map FBO
 	// -----------------------
@@ -166,23 +188,51 @@ int main()
 		// -----
 		processInput(window);
 
-		// change light position over time
-		//lightPos.x = sin(glfwGetTime()) * 3.0f;
-		//lightPos.z = cos(glfwGetTime()) * 2.0f;
-		//lightPos.y = 5.0 + cos(glfwGetTime()) * 1.0f;
+		
 
 		// render
 		// ------
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		// ImGui
+		glfwPollEvents();
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::Begin("MyUI");
+		{
+			ImGui::Checkbox("Perspective", &isPerspective);
+			ImGui::Checkbox("Orthometric", &isOrthometric);
+
+			ImGui::ColorEdit3("lightColor", lightColor);
+			ImGui::Checkbox("AutoLamp", &AutoLamp);
+		}
+		ImGui::End();
+
+		// change light position over time
+		if (AutoLamp == true) {
+			lightPos.x = sin(glfwGetTime()) * 3.0f;
+			lightPos.z = cos(glfwGetTime()) * 2.0f;
+			lightPos.y = 5.0 + cos(glfwGetTime()) * 1.0f;
+		}
+
 		// 1. render depth of scene to texture (from light's perspective)
 		// --------------------------------------------------------------
 		glm::mat4 lightProjection, lightView;
 		glm::mat4 lightSpaceMatrix;
 		float near_plane = 1.0f, far_plane = 7.5f;
-		//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
-		lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+
+		if (isPerspective == true) {
+			isOrthometric = false;
+			lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
+		}
+		else if (isOrthometric == true) {
+			isPerspective = false;
+			lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+		}
+		
+		
 		lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
 		lightSpaceMatrix = lightProjection * lightView;
 		// render scene from light's point of view
@@ -193,7 +243,7 @@ int main()
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 		glClear(GL_DEPTH_BUFFER_BIT);
 		glActiveTexture(GL_TEXTURE0);
-	
+		glBindTexture(GL_TEXTURE_2D, woodTexture);
 		renderScene(simpleDepthShader);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -215,7 +265,7 @@ int main()
 		shader.setVec3("lightPos", lightPos);
 		shader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		glActiveTexture(GL_TEXTURE0);
-	
+		glBindTexture(GL_TEXTURE_2D, woodTexture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, depthMap);
 		renderScene(shader);
@@ -231,13 +281,19 @@ int main()
 
 		// also draw the lamp object
 		lampShader.use();
-		lampShader.setVec3("lampColor", 1.0f, 1.0f, 1.0f);
-		lampShader.setMat4("projection", lightProjection);
-		lampShader.setMat4("view", lightView);
+		lampShader.setVec3("lampColor", lightColor[0], lightColor[1], lightColor[2]);
+		lampShader.setMat4("projection", projection);
+		lampShader.setMat4("view", view);
 		glm::mat4 model = glm::mat4(1.0f);
-		
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, lightPos);
+		model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
+		lampShader.setMat4("model", model);
+		renderCube();
 
 
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
@@ -248,6 +304,11 @@ int main()
 	// ------------------------------------------------------------------------
 	glDeleteVertexArrays(1, &planeVAO);
 	glDeleteBuffers(1, &planeVBO);
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 
 	glfwTerminate();
 	return 0;
@@ -268,8 +329,7 @@ void renderScene(const Shader &shader)
 	model = glm::scale(model, glm::vec3(0.5f));
 	shader.setMat4("model", model);
 	renderCube();
-
-
+	
 }
 
 
@@ -394,6 +454,10 @@ void processInput(GLFWwindow *window)
 		camera.ProcessKeyboard(LEFT, deltaTime);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		camera.ProcessKeyboard(RIGHT, deltaTime);
+	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+		camera.ProcessKeyboard(UP, deltaTime);
+	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		camera.ProcessKeyboard(DOWN, deltaTime);
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes

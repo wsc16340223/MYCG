@@ -8,8 +8,7 @@ void processInput(GLFWwindow *window);
 
 int main()
 {
-	// glfw: initialize and configure
-	// ------------------------------
+	//初始化
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -19,8 +18,7 @@ int main()
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // uncomment this statement to fix compilation on OS X
 #endif
 
-	// glfw window creation
-	// --------------------
+	// 创建窗口
 	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
 	if (window == NULL)
 	{
@@ -28,32 +26,29 @@ int main()
 		glfwTerminate();
 		return -1;
 	}
+
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 
-	// glad: load all OpenGL function pointers
-	// ---------------------------------------
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		return -1;
 	}
 
-	// configure global opengl state
-	// -----------------------------
+	// 开启深度测试
 	glEnable(GL_DEPTH_TEST);
 
-	// build and compile shaders
-	// -------------------------
+	// 着色器
 	Shader shader("D://GLFW/include/shaders/bezier.vs", "D://GLFW/include/shaders/bezier.fs");
 
 	// shader configuration
 	// --------------------
 	shader.use();
 
-	// render loop
-	// -----------
+	int step = 0;
+	// 渲染
 	while (!glfwWindowShouldClose(window))
 	{
 		// input
@@ -64,10 +59,21 @@ int main()
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		renderPoint();
-		renderBezierLine();
+		renderBezierCurve();
 
-		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-		// -------------------------------------------------------------------------------
+		if (drawCurve) {
+			step++;
+			getAnimationPoints((double)step / 3000, points.size() - 1, true, 0);
+			setVertice(&animationCurve, animationVertices);
+			renderAnimation();
+			if (step == 3000) {
+				drawCurve = false;
+				step = 0;
+			}
+			animationCurve.clear();
+		}
+
+
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
@@ -76,20 +82,15 @@ int main()
 	return 0;
 }
 
-// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
-
+	if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+		drawCurve = true;
 }
 
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	// make sure the viewport matches the new window dimensions; note that width and 
-	// height will be significantly larger than specified on retina displays.
 	glViewport(0, 0, width, height);
 }

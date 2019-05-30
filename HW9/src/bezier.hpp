@@ -1,9 +1,8 @@
-#include <learnopengl/shader.h>
+#include<learnopengl/shader.h>
 #include<iostream>
 #include<vector>
 #include<cmath>
 #include<GLFW/glfw3.h>
-
 
 using namespace std;
 
@@ -32,7 +31,32 @@ float pointsVertices[900000] = { 0 };
 float bezierVertices[900000] = { 0 };
 float animationVertices[900000] = { 0 };
 
-
+//计算阶乘
+int factorial(int n);
+//伯恩斯坦基函数
+double Bernstein(int i, int n, double t);
+//对x进行标准化
+float normalizeForX(double x);
+//对y进行标准化
+float normalizeForY(double y);
+//计算bezier曲线
+void drawBezierCurve();
+//将vector坐标存入数组中
+void setVertice(vector<Point> *arr, float *floatArr);
+//鼠标点击时间，左键画点，右键消点
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
+//获取曲线上对应的点
+Point getPointFromCurve(Point A, Point B, double step);
+//获取动态的点
+void getAnimationPoints(double step, int time, bool isFirst, int alreadyPush);
+//动态连接曲线
+void showAnimationCurve(int time, int alreadyShow);
+//绘制点击的位置所在点
+void renderPoint();
+//绘制bezier曲线
+void renderBezierCurve();
+//动态绘制bezier曲线
+void renderAnimation();
 
 
 int factorial(int n) {
@@ -93,6 +117,64 @@ void setVertice(vector<Point> *arr, float *floatArr) {
 	}
 }
 
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+	double xpos, ypos;
+	if (action == GLFW_PRESS) switch (button)
+	{
+	case GLFW_MOUSE_BUTTON_LEFT:
+		glfwGetCursorPos(window, &xpos, &ypos); 
+		points.push_back(Point(xpos, ypos));
+		setVertice(&points, pointsVertices);
+		drawBezierCurve();
+		setVertice(&bezierCurve, bezierVertices);
+		break;
+	case GLFW_MOUSE_BUTTON_RIGHT:
+		glfwGetCursorPos(window, &xpos, &ypos);
+		points.pop_back();
+		setVertice(&points, pointsVertices);
+		drawBezierCurve();
+		setVertice(&bezierCurve, bezierVertices);
+		break;
+	default:
+		return;
+	}
+	return;
+}
+
+Point getPointFromCurve(Point A, Point B, double step) {
+	double x = A.x + (B.x - A.x) * step;
+	double y = A.y + (B.y - A.y) * step;
+	Point temp(x, y);
+	return temp;
+}
+
+void getAnimationPoints(double step, int time, bool isFirst, int alreadyPush) {
+	if (time == 0) {
+		return;
+	}
+	if (isFirst) {
+		for (int i = 0; i < time; i++) {
+			animationCurve.push_back(getPointFromCurve(points[i], points[i + 1], step));
+		}
+		getAnimationPoints(step, time - 1, false, 0);
+	}
+	else {
+		for (int i = alreadyPush; i < time + alreadyPush; i++) {
+			animationCurve.push_back(getPointFromCurve(animationCurve[i], animationCurve[i + 1], step));
+		}
+		getAnimationPoints(step, time - 1, false, alreadyPush + time + 1);
+	}
+}
+
+void showAnimationCurve(int time, int alreadyShow) {
+	if (time == 0) {
+		return;
+	}
+	for (size_t i = alreadyShow; i < time + alreadyShow; i++) {
+		glDrawArrays(GL_LINES, i, 2);
+	}
+	showAnimationCurve(time - 1, alreadyShow + time + 1);
+}
 
 void renderPoint() {
 	if (pointVAO == 0) {
@@ -119,8 +201,7 @@ void renderPoint() {
 	glPointSize(1.0f);
 }
 
-void renderBezierLine()
-{
+void renderBezierCurve() {
 	if (bezierVAO == 0) {
 		glGenVertexArrays(1, &bezierVAO);
 		glGenBuffers(1, &bezierVBO);
@@ -138,26 +219,23 @@ void renderBezierLine()
 	glDrawArrays(GL_POINTS, 0, bezierCurve.size());
 }
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-	double xpos, ypos;
-	if (action == GLFW_PRESS) switch (button)
-	{
-	case GLFW_MOUSE_BUTTON_LEFT:
-		glfwGetCursorPos(window, &xpos, &ypos); 
-		points.push_back(Point(xpos, ypos));
-		setVertice(&points, pointsVertices);
-		drawBezierCurve();
-		setVertice(&bezierCurve, bezierVertices);
-		break;
-	case GLFW_MOUSE_BUTTON_RIGHT:
-		glfwGetCursorPos(window, &xpos, &ypos);
-		points.pop_back();
-		setVertice(&points, pointsVertices);
-		drawBezierCurve();
-		setVertice(&bezierCurve, bezierVertices);
-		break;
-	default:
-		return;
+void renderAnimation() {
+	if (animationVAO == 0) {
+		glGenVertexArrays(1, &animationVAO);
+		glGenBuffers(1, &animationVBO);
+		glBindVertexArray(animationVAO);
+		glBindBuffer(GL_ARRAY_BUFFER, animationVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(animationVertices), animationVertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
 	}
-	return;
+	glBindBuffer(GL_ARRAY_BUFFER, animationVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(animationVertices), animationVertices, GL_STATIC_DRAW);
+	glBindVertexArray(animationVAO);
+	showAnimationCurve(points.size() - 2, 0);
+	glPointSize(10.0f);
+	glDrawArrays(GL_POINTS, 0, animationCurve.size());
+	glPointSize(1.0f);
 }
